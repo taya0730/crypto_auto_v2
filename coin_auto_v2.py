@@ -76,12 +76,13 @@ def get_current_price(ticker):
 	"""현재가 조회"""
 	return pyupbit.get_orderbook(tickers=ticker)[0]["orderbook_units"][0]["ask_price"]
 
+slack_roomname = "#crypto"
 
 # 로그인
 upbit = pyupbit.Upbit(access, secret)
 print("autotrade start")
 # 시작 메세지 슬랙 전송
-post_message(myToken,"#crypto", "autotrade start")
+post_message(myToken,slack_roomname, "autotrade start")
 
 kvalue = best_kvalue()
 tmp_target_price = 0
@@ -99,8 +100,8 @@ while True:
 			
 			if target_price != tmp_target_price:
 				tmp_target_price = target_price
-				post_message(myToken,"#crypto", "Today Kvalue : " +str(kvalue))
-				post_message(myToken,"#crypto", "new T.P : " +str(tmp_target_price))
+				post_message(myToken,slack_roomname, "Today Kvalue : " +str(kvalue))
+				post_message(myToken,slack_roomname, "new T.P : " +str(tmp_target_price))
 			ma5 = get_ma5("KRW-BTC")
 			current_price = get_current_price("KRW-BTC")
 			# 일 최고가 취득
@@ -111,16 +112,16 @@ while True:
 				krw = get_balance("KRW")
 				if krw > 5000:
 					buy_result = upbit.buy_market_order("KRW-BTC", krw*0.9995)
-					post_message(myToken,"#crypto", "BTC buy : " +str(buy_result))
+					post_message(myToken,slack_roomname, "BTC buy : " +str(buy_result))
 		else:
 			# 일봉마감시간에 비트코인을 보유중이라면 매도
 			btc = get_balance("BTC")
 			if btc > 0.00008:
 				sell_result = upbit.sell_market_order("KRW-BTC", btc*0.9995)
-				post_message(myToken,"#crypto", "BTC buy : " +str(sell_result))
+				post_message(myToken,slack_roomname, "BTC buy : " +str(sell_result))
 			kvalue = best_kvalue()
 		time.sleep(1)
 	except Exception as e:
 		print(e)
-		post_message(myToken,"#crypto", "error_log : " + e)
+		post_message(myToken,slack_roomname, "error_log : " + e)
 		time.sleep(1)
