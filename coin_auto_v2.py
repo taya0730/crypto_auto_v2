@@ -14,9 +14,9 @@ secret = secret_key
 # slack token
 myToken = "key"
 
-# 7일간 ｋ값을 넣어서 최고의 성과를 낸 ｋ취득
+# 3일간 ｋ값을 넣어서 최고의 성과를 낸 ｋ취득
 def get_ror(k=0.5):
-	df = pyupbit.get_ohlcv("KRW-BTC", count = 7)
+	df = pyupbit.get_ohlcv("KRW-BTC", count = 3)
 	df['range'] = (df['high'] - df['low']) * k
 	df['target'] = df['open'] + df['range'].shift(1)
 
@@ -76,6 +76,16 @@ def get_current_price(ticker):
 	"""현재가 조회"""
 	return pyupbit.get_orderbook(tickers=ticker)[0]["orderbook_units"][0]["ask_price"]
 
+def get_loss_cut_price(day_max_price = 0):
+	"""손절 기준가"""
+	return day_max_price/100*90
+
+def loss_cut():
+	"""손절 처리"""
+	sell_result = upbit.sell_market_order("KRW-BTC", btc*0.9995)
+	post_message(myToken,slack_roomname, "BTC sell : " +str(sell_result))
+	return
+
 slack_roomname = "#crypto"
 
 # 로그인
@@ -108,6 +118,10 @@ while True:
 			if day_max_price < current_price:
 				day_max_price = current_price
 
+			# 비트코인 보유중 고점에서 10% 빠졌다면 일단 손절
+			if(get_balance("BTC") > 0.00008 and get_loss_cut_price(day_max_price) > current_price):
+				loss_cut()
+
 			if target_price < current_price and ma5 < current_price:
 				krw = get_balance("KRW")
 				if krw > 5000:
@@ -118,7 +132,7 @@ while True:
 			btc = get_balance("BTC")
 			if btc > 0.00008:
 				sell_result = upbit.sell_market_order("KRW-BTC", btc*0.9995)
-				post_message(myToken,slack_roomname, "BTC buy : " +str(sell_result))
+				post_message(myToken,slack_roomname, "BTC sell : " +str(sell_result))
 			kvalue = best_kvalue()
 		time.sleep(1)
 	except Exception as e:
