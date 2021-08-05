@@ -5,6 +5,8 @@ import requests
 import numpy as np
 import schedule
 from fbprophet import Prophet
+
+schedule.clear()
 # upbit key
 access_key = "key"
 secret_key = "key"
@@ -16,9 +18,9 @@ secret = secret_key
 myToken = "key"
 slack_roomname = "#crypto"
 
-# 5일간 데이터를 넣어서 최고의 성과를 낸 ｋ취득
+# 7일간 데이터를 넣어서 최고의 성과를 낸 ｋ취득
 def get_ror(k=0.5):
-	df = pyupbit.get_ohlcv("KRW-BTC", count = 5)
+	df = pyupbit.get_ohlcv("KRW-BTC", count =7)
 	df['range'] = (df['high'] - df['low']) * k
 	df['target'] = df['open'] + df['range'].shift(1)
 
@@ -31,7 +33,7 @@ def get_ror(k=0.5):
 def best_kvalue():
 	tmp_ror = 0
 	tmp_k   = 0
-	for k in np.arange(0.1, 1.0, 0.01):
+	for k in np.arange(0.15, 1.0, 0.01):
 		k = round(k,2)
 		ror = get_ror(k)
 		if(tmp_ror < ror):
@@ -85,6 +87,7 @@ def get_loss_cut_price(day_max_price = 0):
 
 def loss_cut():
 	"""손절 처리"""
+	btc = get_balance("BTC")
 	sell_result = upbit.sell_market_order("KRW-BTC", btc*0.9995)
 	post_message(myToken,slack_roomname, "BTC sell : " +str(sell_result))
 	return
@@ -93,7 +96,8 @@ predicted_close_price = 0
 def predict_price(ticker):
 	"""Prophet으로 당일 종가 가격 예측"""
 	global predicted_close_price
-	df = pyupbit.get_ohlcv(ticker, interval="minute60")
+	# 학습데이터는 3일로 최근 트렌드만 반영되도록 
+	df = pyupbit.get_ohlcv(ticker, count = 144, interval="minute30")
 	df = df.reset_index()
 	df['ds'] = df['index']
 	df['y'] = df['close']
@@ -109,9 +113,11 @@ def predict_price(ticker):
 	predicted_close_price = closeValue
 	post_message(myToken,slack_roomname, "predict_val : " +str(predicted_close_price))
 	post_message(myToken,slack_roomname, "day_max_price : " +str(day_max_price))
-	post_message(myToken,slack_roomname, "loss_cut : " +str(get_loss_cut_price(day_max_price)))
+	print(schedule.jobs)
+
     
-    
+# 일봉 최고가 취득
+day_max_price = 0
 # 로그인
 upbit = pyupbit.Upbit(access, secret)
 print("autotrade start")
@@ -119,13 +125,15 @@ print("autotrade start")
 post_message(myToken,slack_roomname, "autotrade start")
 
 predict_price("KRW-BTC")
-schedule.every().hour.do(lambda: predict_price("KRW-BTC"))
+# 1시간에 한번씩 실행
+# schedule.every().hour.do(lambda: predict_price("KRW-BTC"))
+# 30분에 한번씩 실행
+schedule.every(30).minutes.do(lambda: predict_price("KRW-BTC"))
 
 kvalue = best_kvalue()
 tmp_target_price = 0
 
-# 일봉 최고가 취득
-day_max_price = 0
+
 while True:
 	try:
 		now = datetime.datetime.now()
@@ -147,8 +155,8 @@ while True:
 				day_max_price = current_price
 
 			# 비트코인 보유중 고점에서 10% 빠졌다면 일단 손절
-			if(get_balance("BTC") > 0.00008 and get_loss_cut_price(day_max_price) > current_price):
-				loss_cut()
+			#if(get_balance("BTC") > 0.00008 and get_loss_cut_price(day_max_price) > current_price):
+			#loss_cut()
 
 			if target_price < current_price and ma5 < current_price and current_price < predicted_close_price:
 				krw = get_balance("KRW")
@@ -157,6 +165,7 @@ while True:
 					post_message(myToken,slack_roomname, "BTC buy : " +str(buy_result))
 		else:
 			# 일봉마감시간에 비트코인을 보유중이라면 매도
+			day_max_price = 0
 			btc = get_balance("BTC")
 			if btc > 0.00008:
 				sell_result = upbit.sell_market_order("KRW-BTC", btc*0.9995)
@@ -166,5 +175,5 @@ while True:
 		time.sleep(1)
 	except Exception as e:
 		print(e)
-		post_message(myToken,slack_roomname, "error_log : " + e)
+		post_message(myToken,slack_roomname, "error_log : " + str(e))
 		time.sleep(1)
